@@ -21,6 +21,7 @@ Many users complain that Maxquant does not open source their protein inference a
 The algorithm only need the peptide-protein mapping file (gc format, which is peptide_id protein1;protein2,protein3), does not need fasta at all. 
 
 Feel free to test it. 
+R code in protein inference.Rmd
 
 
 # Logic
