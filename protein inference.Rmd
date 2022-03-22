@@ -1,0 +1,176 @@
+---
+title: "protein inference method in maxquant"
+output: html_notebook
+---
+
+
+```{r setup}
+library(tidyverse)
+```
+
+
+
+
+# Note
+
+* unique peptide in proteinGroup.txt is group unique, not protein unique
+
+
+
+
+
+```{r function}
+
+protieninference <- function(pep2pr){
+        # prepare
+        # find the distinct peptide ids, which there is only one protein matched to a protein
+        unique_peptide_ids <- pep2pr$id[which(unlist(lapply(pep2pr$Proteins, function(x){length(unlist(strsplit(x, ";")))})) ==1)]
+        
+        # convert to 1 to 1 mapping
+        pep2pr_1v1 <- tidytext::unnest_tokens(pep2pr,Protein, Proteins, token = "regex", pattern =  ";", to_lower = FALSE)
+        
+        # produce the protein list with peptide id mapping, and order
+        pr2pep <- aggregate(.~Protein, data = pep2pr_1v1, paste, collapse = ";")
+        pr2pep$counts <- unlist(lapply(pr2pep$id, function(x){length(unlist(strsplit(x, ";")))}))
+        pr2pep <- pr2pep[order(pr2pep$counts,pr2pep$Protein,decreasing = TRUE),]
+        
+        # create a empty protein_group file
+        pg <- data.frame(matrix(ncol = 10, nrow = 0))
+        colnames(pg) <- c("Leading_Protein",
+                          "peptide_Counts",
+                          "#_of_subs",
+                          "peptide_id_leading",
+                          "peptide_counts_each",
+                          "peptide_counts_razor_each",
+                          "peptide_counts_distinct_each",
+                          "protein_names_each", 
+                          "peptide_Ids_each",
+                          "peptide_is_razor")
+        
+        # using vector, instead of data.frame is much faster in R
+        # see here how to speed up: indexing vector not data.frame   https://stackoverflow.com/questions/2908822/speed-up-the-loop-operation-in-r
+
+        protein_v <- pr2pep[,1]
+        pep_v <- pr2pep[,2]
+        count_v <- pr2pep[,3]
+        razor_peptide_ids <- c()
+        
+        i<-0
+        
+        while(length(protein_v)>1){
+          # initialization for each top row
+          Leading_Protein <-protein_v[1]
+          id  <- pep_v[1] # id string
+          ids <- unlist(strsplit(id, ";")) # split ids
+          
+          peptide_Count_each <- length(ids)
+          peptide_Count_razor_each <- sum(!(ids %in% razor_peptide_ids))
+          peptide_is_razor <- paste(!(ids %in% razor_peptide_ids), collapse = ";")
+          peptide_Count_unique_each <- sum(ids %in% unique_peptide_ids)
+          
+          razor_peptide_ids <- unique(c(razor_peptide_ids, ids)) # store all previously used peptide id to determine if this is a razor peptide
+          
+          peptide_Count <- count_v[1]
+          number_of_subs <-1
+          sub_index_to_del <- c()
+          
+          for (j in 2:length(protein_v)){ # start from the bottom(shortest ones), it will avoid missing lines 
+              # the logic is, if find any sub, merge, otherwise, list it. Then delete this line
+              if( all(unlist(strsplit(pep_v[j], ";")) %in% unlist(strsplit(id, ";")))){
+                
+                ids_this_subprotein <- unlist(strsplit(pep_v[j], ";")) # split ids of the current proteins
+                
+                peptide_Count_each <- paste(peptide_Count_each,length(ids_this_subprotein),sep = ";")
+                peptide_Count_razor_each <- paste(peptide_Count_razor_each,sum(ids_this_subprotein %in% razor_peptide_ids),sep = ";")
+                peptide_Count_unique_each <- paste(peptide_Count_unique_each,sum(ids_this_subprotein %in% unique_peptide_ids),sep = ";")
+               
+                protein_v[1] <-  paste(protein_v[1], protein_v[j], sep = ";") # paste protein names
+                pep_v[1] <-  paste(pep_v[1], pep_v[j], sep = "/") # paste peptide ids
+                
+                number_of_subs <- number_of_subs+1 # count how many proteins
+                sub_index_to_del <- c(sub_index_to_del, j)
+                # remove this element, because it is a subprotein of a longer one
+              }
+          }
+        
+          i <- i+1
+
+          pg[i,] <- c(Leading_Protein,peptide_Count,number_of_subs,id,peptide_Count_each,peptide_Count_razor_each,peptide_Count_unique_each,protein_v[1],pep_v[1],peptide_is_razor)# add this to the new data.frames
+          cat(i," \t",Leading_Protein,"\t\t")
+          cat("Found: ", number_of_subs-1, " subproteins;\t")
+          cat(length(protein_v)-1, " rows to go\n")
+        
+          # remove these rows (the leading protein and the sub proteins) from the vector
+          protein_v <- protein_v[-c(1,sub_index_to_del)]
+          pep_v <- pep_v[-c(1,sub_index_to_del)]
+          count_v <- count_v[-c(1,sub_index_to_del)]
+        }
+        
+        # if there is one last lien alone
+        if(length(protein_v)==1){
+          pg[i+1,] <- c(protein_v,count_v,1,pep_v,peptide_Count_each,peptide_Count_razor_each,peptide_Count_unique_each,protein_v[1],pep_v[1],peptide_is_razor)
+        }
+        
+        # add the if unique and unique peptide column
+        pg_mapping <- pg %>% rownames_to_column(var = "pg_id") %>% 
+            select(pg_id,peptide_id_leading) %>% 
+            tidytext::unnest_tokens(.,peptide_id, peptide_id_leading, token = "regex", pattern =  ";", to_lower = FALSE) %>% 
+            aggregate(.~peptide_id, data = ., paste, collapse = ";")
+
+        pg_unique_peptide_ids <- pg_mapping$peptide_id[which(unlist(lapply(pg_mapping$pg_id, function(x){length(unlist(strsplit(x, ";")))})) ==1)]
+
+        pg$peptide_counts_unique_each <-  unlist(lapply(pg$peptide_Ids_each, function(x){
+          paste(unlist(lapply(unlist(strsplit(x, "/")), function(x){sum(unlist(strsplit(x, ";")) %in% pg_unique_peptide_ids)})), collapse = ";" )
+        }))
+        
+        
+        pg$peptide_is_unique <-  unlist(lapply(pg$peptide_Ids_each, function(x){
+          paste(unlist(strsplit(unlist(strsplit(x, "/"))[[1]] , ";")) %in% pg_unique_peptide_ids, collapse = ";")
+        }))
+        
+        
+        # organize column nanmes for easy comparison with maxquant result
+        pg<- pg %>% rename("Peptides"="peptide_Counts",
+                   "Number of proteins"="#_of_subs", 
+                   "Peptide IDs" = "peptide_id_leading",
+                    "Peptide counts (all)"= "peptide_counts_each",
+                   "Peptide counts (razor+unique)" = "peptide_counts_razor_each",
+                  "Peptide counts (distinct)"  = "peptide_counts_distinct_each",
+                  "Protein IDs" = "protein_names_each" ,
+                  "peptide_Ids_each_protein" = "peptide_Ids_each",
+                  "Peptide counts (unique)" = "peptide_counts_unique_each") %>%
+            select("Leading_Protein", 
+                   "Protein IDs", 
+                   "Peptide counts (all)",
+                   "Peptide counts (razor+unique)",
+                   "Peptide counts (unique)",
+                   "Peptide counts (distinct)",
+                   "Number of proteins",
+                   "Peptides",
+                   "Peptide IDs",
+                   "peptide_is_razor",
+                   "peptide_is_unique",
+                   "peptide_Ids_each_protein"
+                   )
+        return(pg)
+}
+
+
+```
+
+```{r test}
+
+peptide_table <- rio::import("peptides.txt", check.names = TRUE) 
+pep2pr <- peptide_table %>% select(c("id", "Proteins")) # only use two columns
+
+system.time(pg <- protieninference(pep2pr))
+
+head(pg)
+
+rio::export(pg, "proteinGroups_homebrew.txt")
+
+
+```
+
+
+
