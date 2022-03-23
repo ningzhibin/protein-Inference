@@ -8,17 +8,6 @@ output: html_notebook
 library(tidyverse)
 ```
 
-
-
-
-# Note
-
-* unique peptide in proteinGroup.txt is group unique, not protein unique
-
-
-
-
-
 ```{r function}
 
 protieninference <- function(pep2pr){
@@ -155,22 +144,19 @@ protieninference <- function(pep2pr){
         return(pg)
 }
 
-
 ```
 
 ```{r test}
 
-peptide_table <- rio::import("peptides.txt", check.names = TRUE) 
-pep2pr <- peptide_table %>% select(c("id", "Proteins")) # only use two columns
-
+pep2pr <- rio::import("QuantifiedPeptides.tsv", check.names = TRUE) %>% select(c("id", "Proteins")) # only use two columns
+# pep2pr_sub <- pep2pr %>% sample_n(2000)
 system.time(pg <- protieninference(pep2pr))
 
 head(pg)
 
 rio::export(pg, "proteinGroups_homebrew.txt")
 
+################
 
 ```
-
-
 
