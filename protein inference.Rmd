@@ -10,13 +10,13 @@ library(tidyverse)
 
 ```{r function}
 
-protieninference <- function(pep2pr){
+protieninference <- function(pep2pr, delim = ";"){
         # prepare
         # find the distinct peptide ids, which there is only one protein matched to a protein
-        unique_peptide_ids <- pep2pr$id[which(unlist(lapply(pep2pr$Proteins, function(x){length(unlist(strsplit(x, ";")))})) ==1)]
+        distinct_peptide_ids <- pep2pr$id[which(unlist(lapply(pep2pr$Proteins, function(x){length(unlist(strsplit(x, delim)))})) ==1)]
         
-        # convert to 1 to 1 mapping
-        pep2pr_1v1 <- tidytext::unnest_tokens(pep2pr,Protein, Proteins, token = "regex", pattern =  ";", to_lower = FALSE)
+        # break apart,  convert to 1 to 1 mapping
+        pep2pr_1v1 <- tidytext::unnest_tokens(pep2pr,Protein, Proteins, token = "regex", pattern =  delim, to_lower = FALSE)
         
         # produce the protein list with peptide id mapping, and order
         pr2pep <- aggregate(.~Protein, data = pep2pr_1v1, paste, collapse = ";")
@@ -24,123 +24,200 @@ protieninference <- function(pep2pr){
         pr2pep <- pr2pep[order(pr2pep$counts,pr2pep$Protein,decreasing = TRUE),]
         
         # create a empty protein_group file
-        pg <- data.frame(matrix(ncol = 10, nrow = 0))
-        colnames(pg) <- c("Leading_Protein",
-                          "peptide_Counts",
-                          "#_of_subs",
-                          "peptide_id_leading",
-                          "peptide_counts_each",
-                          "peptide_counts_razor_each",
-                          "peptide_counts_distinct_each",
-                          "protein_names_each", 
-                          "peptide_Ids_each",
-                          "peptide_is_razor")
-        
-        # using vector, instead of data.frame is much faster in R
-        # see here how to speed up: indexing vector not data.frame   https://stackoverflow.com/questions/2908822/speed-up-the-loop-operation-in-r
+        pg <- data.frame(matrix(ncol = 12, nrow = 0))
+        colnames(pg) <- c("Leading_Protein", # Leading_Protein
+                          "peptide_Counts", #peptide_Count
+                          "#_of_subs", #number_of_subs
+                          "peptide_id_leading", #id
+                          "peptide_counts_each", #peptide_Count_each
+                          "peptide_counts_razor_each", #peptide_Count_razor_each
+                          "peptide_counts_distinct_each", #peptide_Count_distinct_each
+                          "protein_names_each", #protein_v[1]
+                          "peptide_Ids_each",# pep_v[1],
+                          "peptide_is_razor_leading",#peptide_is_razor_leading 
+                          "peptide_Count_razor_leading",
+                          "peptide_IDs_razor_each") #peptide_is_razor  
 
-        protein_v <- pr2pep[,1]
-        pep_v <- pr2pep[,2]
-        count_v <- pr2pep[,3]
-        razor_peptide_ids <- c()
+        # using vector, instead of data.frame is much faster in R:  https://stackoverflow.com/questions/2908822/speed-up-the-loop-operation-in-r
+
+        protein_v <- pr2pep[,1] # get the protein list vector
+        pep_v <- pr2pep[,2] # get the peptide id  list vector
+        count_v <- pr2pep[,3] # get the peptide counts list vector
+        razor_peptide_ids_global <- c() # to store the razoer peptide set (combine all peptides occured)
         
-        i<-0
+        i<-0 # mark how many protein groups inferred 
         
+        # start the loop
         while(length(protein_v)>1){
-          # initialization for each top row
-          Leading_Protein <-protein_v[1]
-          id  <- pep_v[1] # id string
-          ids <- unlist(strsplit(id, ";")) # split ids
-          
-          peptide_Count_each <- length(ids)
-          peptide_Count_razor_each <- sum(!(ids %in% razor_peptide_ids))
-          peptide_is_razor <- paste(!(ids %in% razor_peptide_ids), collapse = ";")
-          peptide_Count_unique_each <- sum(ids %in% unique_peptide_ids)
-          
-          razor_peptide_ids <- unique(c(razor_peptide_ids, ids)) # store all previously used peptide id to determine if this is a razor peptide
-          
-          peptide_Count <- count_v[1]
-          number_of_subs <-1
-          sub_index_to_del <- c()
-          
-          for (j in 2:length(protein_v)){ # start from the bottom(shortest ones), it will avoid missing lines 
-              # the logic is, if find any sub, merge, otherwise, list it. Then delete this line
-              if( all(unlist(strsplit(pep_v[j], ";")) %in% unlist(strsplit(id, ";")))){
+                # initialization for each top row
+                Leading_Protein <-protein_v[1]
+                peptide_ids_string_leading_protein <- pep_v[1]
+                peptide_ids_leading_protein <- unlist(strsplit(pep_v[1], ";")) # split peptide_ids into a vector
                 
-                ids_this_subprotein <- unlist(strsplit(pep_v[j], ";")) # split ids of the current proteins
+                # 
+                peptide_Count_each <- length(peptide_ids_leading_protein)
+                peptide_Count_razor_leading <- peptide_Count_razor_each <- sum(!(peptide_ids_leading_protein %in% razor_peptide_ids_global))
+                peptide_IDs_razor_each <- paste(peptide_ids_leading_protein[!(peptide_ids_leading_protein %in% razor_peptide_ids_global)], collapse = ";")
+                  
+                peptide_is_razor_leading <- paste(!(peptide_ids_leading_protein %in% razor_peptide_ids_global), collapse = ";")
+                peptide_Count_distinct_each <- sum(peptide_ids_leading_protein %in% distinct_peptide_ids)
                 
-                peptide_Count_each <- paste(peptide_Count_each,length(ids_this_subprotein),sep = ";")
-                peptide_Count_razor_each <- paste(peptide_Count_razor_each,sum(ids_this_subprotein %in% razor_peptide_ids),sep = ";")
-                peptide_Count_unique_each <- paste(peptide_Count_unique_each,sum(ids_this_subprotein %in% unique_peptide_ids),sep = ";")
-               
-                protein_v[1] <-  paste(protein_v[1], protein_v[j], sep = ";") # paste protein names
-                pep_v[1] <-  paste(pep_v[1], pep_v[j], sep = "/") # paste peptide ids
+                peptide_Count <- count_v[1]
+                number_of_subs <-1
+                sub_index_to_del <- c(1)
                 
-                number_of_subs <- number_of_subs+1 # count how many proteins
-                sub_index_to_del <- c(sub_index_to_del, j)
-                # remove this element, because it is a subprotein of a longer one
-              }
-          }
-        
-          i <- i+1
-
-          pg[i,] <- c(Leading_Protein,peptide_Count,number_of_subs,id,peptide_Count_each,peptide_Count_razor_each,peptide_Count_unique_each,protein_v[1],pep_v[1],peptide_is_razor)# add this to the new data.frames
-          cat(i," \t",Leading_Protein,"\t\t")
-          cat("Found: ", number_of_subs-1, " subproteins;\t")
-          cat(length(protein_v)-1, " rows to go\n")
-        
-          # remove these rows (the leading protein and the sub proteins) from the vector
-          protein_v <- protein_v[-c(1,sub_index_to_del)]
-          pep_v <- pep_v[-c(1,sub_index_to_del)]
-          count_v <- count_v[-c(1,sub_index_to_del)]
+                for (j in 2:length(protein_v)){ # start from the bottom(shortest ones), it will avoid missing lines 
+                    # the logic is, if find any sub, merge, otherwise, list it. Then delete this line
+                    if( all(unlist(strsplit(pep_v[j], ";")) %in% peptide_ids_leading_protein)){
+                      
+                      ids_this_subprotein <- unlist(strsplit(pep_v[j], ";")) # split ids of the current proteins
+                      
+                      peptide_Count_each <- paste(peptide_Count_each,length(ids_this_subprotein),sep = ";")
+                      peptide_Count_razor_each <- paste(peptide_Count_razor_each,sum(!(ids_this_subprotein %in% razor_peptide_ids_global)),sep = ";")
+                      peptide_Count_distinct_each <- paste(peptide_Count_distinct_each,sum(ids_this_subprotein %in% distinct_peptide_ids),sep = ";")
+                     
+                      peptide_IDs_razor_each <- paste(peptide_IDs_razor_each, ids_this_subprotein[!(ids_this_subprotein %in% razor_peptide_ids_global)], sep = "/")
+                      
+                      
+                      protein_v[1] <-  paste(protein_v[1], protein_v[j], sep = ";") # paste protein names
+                      pep_v[1] <-  paste(pep_v[1], pep_v[j], sep = "/") # paste peptide ids
+                      
+                      number_of_subs <- number_of_subs+1 # count how many proteins
+                      sub_index_to_del <- c(sub_index_to_del, j)
+                      # remove this element, because it is a subprotein of a longer one
+                    }
+                }
+                razor_peptide_ids_global <- unique(c(razor_peptide_ids_global, peptide_ids_leading_protein)) # store all previously used peptide id to determine if this is a razor peptide
+                i <- i+1
+      
+                pg[i,] <- c(Leading_Protein,
+                            peptide_Count,
+                            number_of_subs,
+                            peptide_ids_string_leading_protein,
+                            peptide_Count_each,
+                            peptide_Count_razor_each,
+                            peptide_Count_distinct_each,
+                            protein_v[1],
+                            pep_v[1],
+                            peptide_is_razor_leading,
+                            peptide_Count_razor_leading,
+                            peptide_IDs_razor_each)# add this to the new data.frames
+                
+                cat(i," \t",Leading_Protein,"\twith",peptide_Count," peptides;\t")
+                cat("Found: ", number_of_subs-1, " subproteins;\t")
+                cat(length(protein_v)-1, " rows left\n")
+              
+                # remove these rows (the leading protein and the sub proteins) from the vector
+                protein_v <- protein_v[-sub_index_to_del]
+                pep_v <- pep_v[-sub_index_to_del]
+                count_v <- count_v[-sub_index_to_del]
         }
         
         # if there is one last lien alone
         if(length(protein_v)==1){
-          pg[i+1,] <- c(protein_v,count_v,1,pep_v,peptide_Count_each,peptide_Count_razor_each,peptide_Count_unique_each,protein_v[1],pep_v[1],peptide_is_razor)
+          pg[i+1,] <- c(protein_v,
+                        count_v,
+                        1, # number of sub proteins
+                        pep_v, # peptide ids
+                        peptide_Count_each,
+                        peptide_Count_razor_each,
+                        peptide_Count_distinct_each,
+                        protein_v,
+                        pep_v, #peptide_Ids_each
+                        peptide_is_razor_leading,
+                        peptide_Count_razor_leading,
+                        #peptide_IDs_razor_leading,
+                        peptide_IDs_razor_each)
         }
         
-        # add the if unique and unique peptide column
+        
+        
+        # re examine the group uniqueness, because the uniqueness here is group unique,
         pg_mapping <- pg %>% rownames_to_column(var = "pg_id") %>% 
             select(pg_id,peptide_id_leading) %>% 
             tidytext::unnest_tokens(.,peptide_id, peptide_id_leading, token = "regex", pattern =  ";", to_lower = FALSE) %>% 
             aggregate(.~peptide_id, data = ., paste, collapse = ";")
-
+        
         pg_unique_peptide_ids <- pg_mapping$peptide_id[which(unlist(lapply(pg_mapping$pg_id, function(x){length(unlist(strsplit(x, ";")))})) ==1)]
 
+        # adding columns
+        
         pg$peptide_counts_unique_each <-  unlist(lapply(pg$peptide_Ids_each, function(x){
           paste(unlist(lapply(unlist(strsplit(x, "/")), function(x){sum(unlist(strsplit(x, ";")) %in% pg_unique_peptide_ids)})), collapse = ";" )
         }))
         
-        
-        pg$peptide_is_unique <-  unlist(lapply(pg$peptide_Ids_each, function(x){
+        pg$peptide_is_unique_leading <-  unlist(lapply(pg$peptide_Ids_each, function(x){
           paste(unlist(strsplit(unlist(strsplit(x, "/"))[[1]] , ";")) %in% pg_unique_peptide_ids, collapse = ";")
         }))
         
+        pg$peptide_counts_razor_unique_each <- unlist(lapply(1:nrow(pg), function(x){
+          
+          peptide_IDs_each <- unlist(strsplit(pg$peptide_Ids_each[x], "/"))
+          peptide_IDs_razor_each <- unlist(strsplit(pg$peptide_IDs_razor_each[x], "/"))
+          
+          if(length(peptide_IDs_each) == 1 && length(peptide_IDs_razor_each) ==0){
+            return(0)
+          }else{
+            return(
+              paste(unlist(lapply(1: length(peptide_IDs_each), function(x){
+                  peptide_IDs_this <- unlist(strsplit(peptide_IDs_each[x], ";"))
+                  peptide_IDs_unique_this <- peptide_IDs_this[peptide_IDs_this %in% pg_unique_peptide_ids]
+                  peptide_IDs_razor_this <- unlist(strsplit(peptide_IDs_razor_each[x], ";")) # razor list is already generated
+                  length(unique(c(peptide_IDs_unique_this,peptide_IDs_razor_this)))
+          })), collapse = ";" )
+            )
+          }
+
+          
+        }))
         
+        
+        
+        pg$peptide_counts_razor_unique_leading <- unlist(lapply(pg$peptide_counts_razor_unique_each, function(x){
+            unlist(strsplit(x, ";"))[[1]]
+          }))
+
+        pg$peptide_counts_unique_leading <- unlist(lapply(pg$peptide_counts_unique_each, function(x){
+            unlist(strsplit(x, ";"))[[1]]
+          }))
+  
         # organize column nanmes for easy comparison with maxquant result
-        pg<- pg %>% rename("Peptides"="peptide_Counts",
+        pg <-  pg %>% filter(peptide_counts_razor_unique_leading >0) %>%  # remove pg with 0 razor peptides
+          rename("Peptide counts leading"="peptide_Counts",
                    "Number of proteins"="#_of_subs", 
-                   "Peptide IDs" = "peptide_id_leading",
+                   "Peptide IDs leading" = "peptide_id_leading",
                     "Peptide counts (all)"= "peptide_counts_each",
-                   "Peptide counts (razor+unique)" = "peptide_counts_razor_each",
+                   "Peptide counts (razor)" = "peptide_counts_razor_each",
                   "Peptide counts (distinct)"  = "peptide_counts_distinct_each",
                   "Protein IDs" = "protein_names_each" ,
-                  "peptide_Ids_each_protein" = "peptide_Ids_each",
-                  "Peptide counts (unique)" = "peptide_counts_unique_each") %>%
+                  "peptide IDs each" = "peptide_Ids_each",
+                  "Peptide counts (unique)" = "peptide_counts_unique_each",
+                  "Peptide counts (razor) leading" = "peptide_Count_razor_leading",
+                  "peptide_is_razor leading" ="peptide_is_razor_leading",
+                  "peptide_is_unique leading" ="peptide_is_unique_leading",
+                  "Peptide counts (razor+unique)" = "peptide_counts_razor_unique_each",
+                  "Peptide counts (unique) leading" = "peptide_counts_unique_leading",
+                  "Peptide counts (razor+unique) leading"= "peptide_counts_razor_unique_leading"
+                  #"peptide IDs unique each"  = "pg_unique_peptide_ids" 
+                  ) %>%
             select("Leading_Protein", 
+                   "Peptide counts leading",
+                   "Peptide counts (razor) leading",
+                   "Peptide counts (unique) leading",
+                   "Peptide counts (razor+unique) leading",
+                   "Peptide IDs leading",
+                   "peptide_is_razor leading",
+                   "peptide_is_unique leading",
+                   "Number of proteins",
                    "Protein IDs", 
                    "Peptide counts (all)",
-                   "Peptide counts (razor+unique)",
+                   "Peptide counts (razor)",
                    "Peptide counts (unique)",
+                   "Peptide counts (razor+unique)",
                    "Peptide counts (distinct)",
-                   "Number of proteins",
-                   "Peptides",
-                   "Peptide IDs",
-                   "peptide_is_razor",
-                   "peptide_is_unique",
-                   "peptide_Ids_each_protein"
-                   )
+                   "peptide IDs each"
+                   #"peptide IDs unique each"
+                   ) 
         return(pg)
 }
 

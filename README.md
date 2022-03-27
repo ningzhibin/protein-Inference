@@ -32,6 +32,8 @@ R code in protein inference.Rmd
 * Order the table according the number of peptides mapped to each protein
 * Start from the top1 protein (leading protein), iterate the whole table from the 2nd one, find all sub proteins (with peptide ids as subset of the first protein), group them all together as a protein group and store it in another table. Then delete all these proteins from the table
 * Iterate the above step, until the table is empty 
+* re-examine the list, to tell if the peptides are group unique
+* remove protein groups with 0 razor proteins 
 
 
 # Some questions
@@ -52,6 +54,9 @@ As you can see that there will be some uncertainty. When ordered by peptide coun
 * peptide.txt: direct output from maxquant, used as input here
 * proteinGroups.txt: directly ouput from maxqunat, for comparison
 * proteinGroups_homebrew.txt: output by my script. 
+
+This algrithm does not tr to come out with the shortest list. It only makes sure that each protein group has at least 1 razor peptide, not even 1 unique peptides. Therefore it is easy and works for quantification. 
+
 
 
 
