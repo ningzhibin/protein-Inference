@@ -56,10 +56,19 @@ As you can see that there will be some uncertainty. When ordered by peptide coun
 * proteinGroups_homebrew.txt: output by my script. 
 
 # proteingruops without unique peptides
-This algrithm does not try to come out with the shortest protein group list. It only makes sure that each protein group has at least 1 razor peptide, not even 1 unique peptides. Therefore it is easy and works for quantification. 
-You will find some proteingroups without any group-unique peptides, some times these proteins even have a very good number of razor peptides. These proteins could be technically removed without any issue, with covering all peptides identified. If you like you can do another round of calculation, by deleting all these proteins with no unique pepetides, then re-identify if a peptide is a razor peptides. 
+This algorithm does not try to come out with the shortest protein group list. It only makes sure that each protein group has at least 1 razor peptide, not even 1 unique peptides. Therefore it is easy and works for quantification. 
+You will find some proteingroups without any group-unique peptides, some times these proteins even have a very good number of razor peptides. These proteins could be technically removed without any issue, with covering all peptides identified. If you like you can do another round of calculation, by deleting all these proteins with no unique peptides, then re-identify if a peptide is a razor peptides. 
 
-Some further reduction could also be performed, for cases that a subset peptides from a proteingroup can be explained by some other (more than 1) proteingroups. If true, this protein could also be removed. However, this is only for the purpose of being parsimony. Personally, for quantification, the concept of razor peptide (shared peptide only qunatified once) is simple and efficient. 
+Some further reduction could also be performed, for cases that a subset peptides from a proteingroup can be explained by some other (more than 1) proteingroups. If true, this protein could also be removed. Remember that which protein to keep for this case also does not have one only answer. 
+
+Exmample: which proteingroup???????
+
+proteingroup1: peptide2, peptide3
+proteingroup2: peptide1, peptide3
+proteingroup3: peptide1, peptide2
+
+
+However, this is only for the purpose of being parsimony. Personally, for quantification, the concept of razor peptide (shared peptide only qunatified once) is simple and efficient. 
 
 
 
