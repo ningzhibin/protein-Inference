@@ -61,11 +61,10 @@ You will find some proteingroups without any group-unique peptides, some times t
 
 Some further reduction could also be performed, for cases that a subset peptides from a proteingroup can be explained by some other (more than 1) proteingroups. If true, this protein could also be removed. Remember that which protein to keep for this case also does not have one only answer. 
 
-Exmample: which proteingroup???????
-
-proteingroup1: peptide2, peptide3
-proteingroup2: peptide1, peptide3
-proteingroup3: peptide1, peptide2
+## Exmample: which proteingroup???????
+*proteingroup1: peptide2, peptide3
+*proteingroup2: peptide1, peptide3
+*proteingroup3: peptide1, peptide2
 
 
 However, this is only for the purpose of being parsimony. Personally, for quantification, the concept of razor peptide (shared peptide only qunatified once) is simple and efficient. 
